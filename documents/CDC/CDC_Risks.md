@@ -9,15 +9,38 @@ Change Data Capture (CDC) in SQL Server provides an efficient mechanism for trac
 ## Risks
 
 ### 1. **Untracked Changes**
-   - **Issue:** Certain types of database changes are not tracked by CDC, which can lead to reporting inconsistencies and data integrity issues.
+   - **Issue:** Certain types of database changes are not tracked by CDC, leading to inconsistencies and gaps in the captured data.
    - **Details:**
-     - Changes such as table truncations, certain bulk operations, or direct manipulation of CDC system tables are not captured by CDC.
-     - Schema changes, like adding new tables or columns, require manual reconfiguration of CDC to track these objects. Without this, the new data will remain untracked.
-     - Drop-and-recreate operations on CDC-enabled tables can result in the loss of tracking metadata, effectively breaking change capture for that table.
+     - **Types of Changes That Break CDC:**
+       - **Table Truncation:** Directly truncating a CDC-enabled table clears all data from the table without being recorded in CDC change tables.
+       - **Bulk Inserts/Updates Without `TABLOCK`:** Bulk operations that bypass the transaction log (e.g., using the `BULK INSERT` command without `TABLOCK`) are not captured by CDC.
+       - **Drop and Recreate Tables:** Dropping a CDC-enabled table deletes its associated CDC metadata, breaking tracking entirely for that table.
+       - **Schema Modifications:** 
+         - Adding or removing columns in a CDC-enabled table is not automatically reflected in the CDC change tables.
+         - Changing column data types may disrupt change capture or result in errors in downstream processes.
+       - **Disabling CDC:** Explicitly disabling CDC on a table or database removes associated metadata and prevents further tracking.
+     - **Reconfiguration Steps for Schema Changes:**
+       - **Adding New Columns:**
+         1. Drop CDC for the affected table using `sys.sp_cdc_disable_table`.
+         2. Add the new column(s) to the table.
+         3. Re-enable CDC for the table using `sys.sp_cdc_enable_table` and include the new column(s) in the list of tracked columns.
+       - **Removing or Renaming Columns:**
+         - CDC does not handle column renames or removals gracefully. You must:
+           1. Disable CDC for the affected table.
+           2. Modify the schema.
+           3. Re-enable CDC with the updated column configuration.
+       - **Changing Column Data Types:**
+         1. Temporarily disable CDC on the table.
+         2. Alter the column's data type.
+         3. Re-enable CDC, ensuring that downstream consumers of the change data handle the updated data type.
+       - **Table Drops:**
+         - If a table is dropped and recreated, you must re-enable CDC for the new table version and adjust any downstream dependencies that rely on the original change data.
+
    - **Mitigation:**
-     - Implement policies to limit untracked operations and ensure they are performed only when necessary.
-     - Create monitoring or audit mechanisms to identify changes that bypass CDC tracking.
-     - Educate the `db_owner` team on the limitations of CDC and best practices for making changes.
+     - Implement a strict policy to avoid untracked operations such as truncations or unlogged bulk inserts.
+     - Require schema changes to be reviewed and tested for compatibility with CDC before deployment.
+     - Automate or document CDC reconfiguration steps to ensure quick recovery after schema modifications.
+     - Use auditing mechanisms to detect schema changes that may impact CDC.
 
 ---
 
