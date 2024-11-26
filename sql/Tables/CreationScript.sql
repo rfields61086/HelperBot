@@ -1,7 +1,7 @@
 DECLARE @TableName NVARCHAR(128) = 'YourTableName';
 DECLARE @TableScript NVARCHAR(MAX) = '';
 
--- Columns with default constraints
+-- Columns with default constraint names
 WITH TableColumns AS (
     SELECT 
         c.name AS ColumnName,
@@ -16,7 +16,8 @@ WITH TableColumns AS (
             ELSE NULL
         END AS DataTypeLength,
         c.is_nullable AS IsNullable,
-        dc.definition AS DefaultConstraint,
+        dc.name AS DefaultConstraintName,
+        dc.definition AS DefaultConstraintDefinition,
         CASE 
             WHEN c.is_identity = 1 THEN 'IDENTITY(' + CAST(ic.seed_value AS NVARCHAR) + ',' + CAST(ic.increment_value AS NVARCHAR) + ')'
             ELSE NULL
@@ -33,7 +34,7 @@ SELECT @TableScript = @TableScript +
     ISNULL('(' + DataTypeLength + ')', '') +
     ISNULL(' ' + IdentityDefinition, '') +
     CASE WHEN IsNullable = 0 THEN ' NOT NULL' ELSE ' NULL' END +
-    ISNULL(' DEFAULT ' + DefaultConstraint, '') + ',' + CHAR(13)
+    ISNULL(' CONSTRAINT ' + QUOTENAME(DefaultConstraintName) + ' DEFAULT ' + DefaultConstraintDefinition, '') + ',' + CHAR(13)
 FROM TableColumns;
 
 -- Primary Keys, Unique Constraints, and Foreign Keys
