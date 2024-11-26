@@ -23,6 +23,16 @@ function Get-PrimaryKeyName {
     return "$TableName" + "Id"
 }
 
+# Function to get the table creation script using dbatools
+function Get-TableScript {
+    param (
+        [string]$TableName
+    )
+
+    $tableDetails = Get-DbaTable -SqlInstance $serverName -Database $databaseName -Table $TableName
+    return $tableDetails.Script
+}
+
 # Function to create a new table with a primary key
 function Create-NewTable {
     param (
@@ -30,19 +40,17 @@ function Create-NewTable {
     )
     $primaryKeyName = Get-PrimaryKeyName -TableName $OriginalTableName
 
-    # Get the original table creation script
-    $originalTableScriptQuery = @"
-        SELECT OBJECT_DEFINITION(OBJECT_ID('$OriginalTableName')) AS OriginalTableScript
-"@
-    $originalTableScript = (Execute-SQL -Query $originalTableScriptQuery).OriginalTableScript
+    # Fetch the original table creation script
+    $originalTableScript = Get-TableScript -TableName $OriginalTableName
 
-    # Modify the script to include the primary key
+    # Modify the script to create the new table and add a primary key
     $newTableName = "$OriginalTableName"_WithPK
     $newTableScript = $originalTableScript -replace "CREATE TABLE \[$OriginalTableName\]", "CREATE TABLE [$newTableName]"
     $newTableScript += @"
 ALTER TABLE [$newTableName] ADD [$primaryKeyName] INT NOT NULL IDENTITY(1,1) PRIMARY KEY;
 "@
-    # Create the new table
+
+    # Execute the new table creation script
     Execute-SQL -Query $newTableScript
 
     return @{
