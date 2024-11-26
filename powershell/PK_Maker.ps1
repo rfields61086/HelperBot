@@ -87,7 +87,15 @@ function Bulk-CopyData {
 }
 
 # Main Process
-$tables = Execute-SQL -Query "SELECT DISTINCT TableName FROM $stagingTable;"
+$tables = Execute-SQL -Query @"
+    SELECT TableName
+    FROM $stagingTable
+    WHERE RowCount IS NULL 
+      AND SizeOnDiskMB IS NULL 
+      AND OriginalTableScript IS NULL 
+      AND NewTableScript IS NULL 
+      AND TimeToCopyRowsInSeconds IS NULL;
+"@
 
 foreach ($table in $tables) {
     $tableName = $table.TableName
@@ -103,12 +111,18 @@ foreach ($table in $tables) {
     $sizeQuery = "EXEC sp_spaceused '$tableName';"
     $tableSize = (Execute-SQL -Query $sizeQuery).Data[0].size
 
-    # Insert metrics into the staging table
-    $insertMetricsQuery = @"
-        INSERT INTO $stagingTable (TableName, RowCount, SizeOnDiskMB, OriginalTableScript, NewTableScript, TimeToCopyRowsInSeconds)
-        VALUES ('$tableName', $($copyMetrics.RowCount), $tableSize, N'$($tableMetrics.OriginalTableScript)', N'$($tableMetrics.NewTableScript)', $($copyMetrics.TimeTaken));
+    # Update metrics in the staging table
+    $updateMetricsQuery = @"
+        UPDATE $stagingTable
+        SET RowCount = $($copyMetrics.RowCount),
+            SizeOnDiskMB = $tableSize,
+            OriginalTableScript = N'$($tableMetrics.OriginalTableScript)',
+            NewTableScript = N'$($tableMetrics.NewTableScript)',
+            TimeToCopyRowsInSeconds = $($copyMetrics.TimeTaken),
+            ReportDate = GETDATE()
+        WHERE TableName = '$tableName';
 "@
-    Execute-SQL -Query $insertMetricsQuery
+    Execute-SQL -Query $updateMetricsQuery
 }
 
 Write-Host "Processing complete!"
