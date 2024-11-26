@@ -86,6 +86,49 @@ function Bulk-CopyData {
     }
 }
 
+function Get-TableScript {
+    param (
+        [string]$TableName
+    )
+
+    $query = @"
+DECLARE @TableName NVARCHAR(128) = '$TableName';
+DECLARE @TableScript NVARCHAR(MAX);
+
+WITH TableColumns AS (
+    SELECT 
+        c.name AS ColumnName,
+        t.name AS DataType,
+        c.max_length AS MaxLength,
+        c.precision AS Precision,
+        c.scale AS Scale,
+        c.is_nullable AS IsNullable
+    FROM sys.columns c
+    INNER JOIN sys.tables tb ON c.object_id = tb.object_id
+    INNER JOIN sys.types t ON c.user_type_id = t.user_type_id
+    WHERE tb.name = @TableName
+)
+SELECT @TableScript = ISNULL(@TableScript, '') +
+    QUOTENAME(ColumnName) + ' ' + DataType +
+    CASE 
+        WHEN DataType IN ('varchar', 'nvarchar') THEN '(' + CASE WHEN MaxLength = -1 THEN 'MAX' ELSE CAST(MaxLength AS NVARCHAR) END + ')'
+        WHEN DataType IN ('decimal', 'numeric') THEN '(' + CAST(Precision AS NVARCHAR) + ',' + CAST(Scale AS NVARCHAR) + ')'
+        ELSE ''
+    END +
+    CASE WHEN IsNullable = 0 THEN ' NOT NULL' ELSE '' END + ','
+FROM TableColumns;
+
+SET @TableScript = 'CREATE TABLE ' + QUOTENAME(@TableName) + '(' + LEFT(@TableScript, LEN(@TableScript) - 1) + ');';
+
+SELECT @TableScript AS TableScript;
+"@
+
+    $result = Execute-SQL -Query $query
+    return $result.TableScript
+}
+
+
+
 # Main Process
 $tables = Execute-SQL -Query @"
     SELECT TableName
