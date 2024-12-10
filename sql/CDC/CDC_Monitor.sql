@@ -74,21 +74,14 @@ SELECT
     ct.capture_instance AS CaptureInstance,
     ct.source_schema AS SchemaName,
     ct.source_name AS TableName,
-    fn.cdc.fn_cdc_get_min_lsn(ct.capture_instance) AS MinLSN,
-    fn.cdc.fn_cdc_get_max_lsn() AS MaxLSN,
-    ltm.tran_begin_time AS MinLSNCommitTime,
-    ltm.tran_end_time AS MaxLSNCommitTime
-FROM
-    cdc.change_tables AS ct
-    CROSS APPLY (
-        SELECT
-            sys.fn_cdc_map_lsn_to_time(fn.cdc.fn_cdc_get_min_lsn(ct.capture_instance)) AS tran_begin_time,
-            sys.fn_cdc_map_lsn_to_time(fn.cdc.fn_cdc_get_max_lsn()) AS tran_end_time
-    ) AS ltm
-ORDER BY
-    ct.source_schema,
-    ct.source_name;
+    sys.fn_cdc_get_min_lsn(ct.capture_instance) AS MinLSN,
+    sys.fn_cdc_get_max_lsn() AS MaxLSN,
+    sys.fn_cdc_map_lsn_to_time(sys.fn_cdc_get_min_lsn(ct.capture_instance)) AS MinLSNCommitTime,
+    sys.fn_cdc_map_lsn_to_time(sys.fn_cdc_get_max_lsn()) AS MaxLSNCommitTime
+FROM cdc.change_tables AS ct
+ORDER BY ct.source_schema, ct.source_name;
 GO
+
 
 
 
