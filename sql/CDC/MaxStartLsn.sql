@@ -1,31 +1,44 @@
-CREATE FUNCTION dbo.GetMaxStartLsn
-(
-    @captureInstanceName NVARCHAR(128)
-)
-RETURNS BINARY(10)
-AS
+-- Step 1: Create a temporary table to store the results
+CREATE TABLE #MaxLsnResults (
+    CaptureInstanceName NVARCHAR(128),
+    MaxStartLsn BINARY(10)
+);
+
+-- Step 2: Get a list of all capture instances from cdc.change_tables
+DECLARE @captureInstanceTable TABLE (RowNum INT IDENTITY(1, 1), CaptureInstance NVARCHAR(128));
+INSERT INTO @captureInstanceTable (CaptureInstance)
+SELECT capture_instance
+FROM cdc.change_tables;
+
+-- Variables for iteration
+DECLARE @rowCount INT, @currentRow INT = 1, @currentCaptureInstance NVARCHAR(128), @maxLsn BINARY(10);
+
+-- Get the total number of capture instances
+SELECT @rowCount = COUNT(*) FROM @captureInstanceTable;
+
+-- Step 3: While loop to iterate through each capture instance
+WHILE @currentRow <= @rowCount
 BEGIN
-    DECLARE @changeTableName NVARCHAR(128)
-    DECLARE @sql NVARCHAR(MAX)
-    DECLARE @result BINARY(10)
+    -- Get the current capture instance name
+    SELECT @currentCaptureInstance = CaptureInstance
+    FROM @captureInstanceTable
+    WHERE RowNum = @currentRow;
 
-    -- Get the name of the change table for the provided capture instance
-    SELECT @changeTableName = CONCAT('cdc.', capture_instance + '_CT')
-    FROM cdc.change_tables
-    WHERE capture_instance = @captureInstanceName
+    -- Execute the stored procedure to get the max LSN for the current capture instance
+    EXEC dbo.GetMaxStartLsn 
+        @captureInstanceName = @currentCaptureInstance,
+        @maxStartLsn = @maxLsn OUTPUT;
 
-    -- If the capture instance doesn't exist, return NULL
-    IF @changeTableName IS NULL
-    BEGIN
-        RETURN NULL
-    END
+    -- Insert the results into the temporary table
+    INSERT INTO #MaxLsnResults (CaptureInstanceName, MaxStartLsn)
+    VALUES (@currentCaptureInstance, @maxLsn);
 
-    -- Construct dynamic SQL to get the MAX(__$start_lsn) from the change table
-    SET @sql = 'SELECT @result = MAX(__$start_lsn) FROM ' + @changeTableName
+    -- Move to the next row
+    SET @currentRow = @currentRow + 1;
+END;
 
-    -- Execute the dynamic SQL
-    EXEC sp_executesql @sql, N'@result BINARY(10) OUTPUT', @result OUTPUT
+-- Step 4: Select the results from the temporary table
+SELECT * FROM #MaxLsnResults;
 
-    RETURN @result
-END
-GO
+-- Clean up
+DROP TABLE #MaxLsnResults;
