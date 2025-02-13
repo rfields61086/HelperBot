@@ -175,10 +175,10 @@ def generate_ddl_for_stored_proc(sp_name, referenced_tables):
 
 
 # Main execution
-repo_path = "C:\\Users\\rfiel\\OneDrive\\Desktop\\REPO"
+repo_path = ""
 defaultDB = "ThisDB"
 #repo_path = input("Enter the top-level path for the database repository: ").strip()
-sql_file_path = "C:\\Users\\rfiel\\OneDrive\\Desktop\\Depends_Tester.sql"
+sql_file_path = ""
 
 sql_procedure = read_sql_file(sql_file_path)
 sp_name = extract_stored_procedure_name(sql_procedure)
