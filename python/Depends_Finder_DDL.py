@@ -30,39 +30,45 @@ def extract_stored_procedure_name(sql):
 
 def extract_tables_and_columns(sql):
     """
-    Extracts fully qualified table names, columns, and JOIN columns.
+    Extracts fully qualified table names and their columns from a SQL stored procedure.
+    Supports both bracketed and non-bracketed table identifiers.
     """
     tables = {}
     columns = defaultdict(set)
 
+    # ✅ Format SQL for consistent parsing
     sql = sqlparse.format(sql, strip_comments=True, keyword_case='upper')
 
-    # Extract FROM and JOIN table names with aliases
+    # ✅ Updated regex to support:
+    # - Fully qualified table names (Database.Schema.Table)
+    # - Optional square brackets around table names and aliases
     table_pattern = re.compile(r"""
-    (?:FROM|JOIN)                 # Match FROM or JOIN
-    \s+\[?([\w]+)\]?              # Match optional bracketed Database name
-    \.\[?([\w]+)\]?               # Match optional bracketed Schema name
-    \.\[?([\w]+)\]?               # Match optional bracketed Table name
-    (?:\s+AS\s+\[?([\w]+)\]?)?    # Match optional alias
-""", re.IGNORECASE | re.VERBOSE)
-    for match in re.findall(table_pattern, sql, re.IGNORECASE):
-        full_table_name = match[0].strip('[]')
-        alias = match[1] or match[2] or full_table_name
-        tables[alias] = full_table_name
+        (?:FROM|JOIN)                 # Match FROM or JOIN
+        \s+\[?([\w]+)\]?              # Match optional bracketed Database name
+        \.\[?([\w]+)\]?               # Match optional bracketed Schema name
+        \.\[?([\w]+)\]?               # Match optional bracketed Table name
+        (?:\s+AS\s+\[?([\w]+)\]?)?    # Match optional alias
+    """, re.IGNORECASE | re.VERBOSE)
 
-    # Extract columns from SELECT clause
-    select_pattern = r"SELECT\s+(.*?)\s+FROM"
-    select_match = re.search(select_pattern, sql, re.DOTALL | re.IGNORECASE)
+    # ✅ Extract table names and aliases
+    for match in table_pattern.findall(sql):
+        db, schema, table, alias = match
+        full_table_name = f"{db}.{schema}.{table}"
+        tables[alias or full_table_name] = full_table_name  # Store alias if present
+
+    # ✅ Extract columns from SELECT clause
+    select_pattern = re.compile(r"\[?([\w]+)\]?\.\[?([\w]+)\]?", re.IGNORECASE)
+    select_match = re.search(r"SELECT\s+(.*?)\s+FROM", sql, re.DOTALL | re.IGNORECASE)
+
     if select_match:
         select_clause = select_match.group(1)
-        column_list = re.findall(r"([a-zA-Z0-9_\[\]\.]+)\.([a-zA-Z0-9_\[\]]+)", select_clause)
-        for alias, column in column_list:
-            table_name = tables.get(alias, alias)
+        for alias, column in select_pattern.findall(select_clause):
+            table_name = tables.get(alias, alias)  # Resolve alias to full name
             columns[table_name].add(column.strip('[]'))
 
-    # Extract columns from JOIN conditions
-    join_pattern = r"ON\s+([a-zA-Z0-9_\[\]\.]+)\.([a-zA-Z0-9_\[\]]+)\s*=\s*([a-zA-Z0-9_\[\]\.]+)\.([a-zA-Z0-9_\[\]]+)"
-    for left_table_alias, left_col, right_table_alias, right_col in re.findall(join_pattern, sql, re.IGNORECASE):
+    # ✅ Extract columns from JOIN conditions
+    join_pattern = re.compile(r"ON\s+\[?([\w]+)\]?\.\[?([\w]+)\]?\s*=\s*\[?([\w]+)\]?\.\[?([\w]+)\]?", re.IGNORECASE)
+    for left_table_alias, left_col, right_table_alias, right_col in join_pattern.findall(sql):
         left_table = tables.get(left_table_alias, left_table_alias)
         right_table = tables.get(right_table_alias, right_table_alias)
         columns[left_table].add(left_col.strip('[]'))
