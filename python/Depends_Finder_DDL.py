@@ -38,7 +38,7 @@ def extract_tables_and_columns(sql):
     sql = sqlparse.format(sql, strip_comments=True, keyword_case='upper')
 
     # Extract FROM and JOIN table names with aliases
-    table_pattern = r"(?<=\bFROM\b|\bJOIN\b)\s+((?:\w+\.)?(?:\w+\.)?\w+)(?:\s+AS\s+([\w\[\]]+)|\s+([\w\[\]]+))?"
+    table_pattern = r"(?<=\bFROM\b|\bJOIN\b)\s+\[?([\w]+\.[\w]+\.[\w]+)\]?(?:\s+AS\s+\[?([\w]+)\]?|\s+\[?([\w]+)\]?)?"
     for match in re.findall(table_pattern, sql, re.IGNORECASE):
         full_table_name = match[0].strip('[]')
         alias = match[1] or match[2] or full_table_name
